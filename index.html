@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xcortex Download Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --text-color: #00ff41;
+            --dim-color: #008f11;
+            --error-red: #ff3333;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Fira Code', monospace;
+            margin: 0; padding: 20px;
+            height: 100vh;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 10; transition: opacity 0.5s;
+            padding: 20px; text-align: center;
+        }
+
+        h1 { font-size: 1.8rem; text-shadow: 0 0 10px var(--text-color); margin-bottom: 10px; }
+        .subtitle { color: var(--dim-color); font-size: 0.85rem; margin-bottom: 30px; max-width: 500px; line-height: 1.5; }
+
+        .download-btn {
+            background: transparent; border: 2px solid var(--text-color);
+            color: var(--text-color); padding: 15px 25px;
+            font-size: 0.85rem; font-family: 'Fira Code', monospace;
+            cursor: pointer; letter-spacing: 1px;
+            transition: all 0.3s; box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
+            max-width: 90vw; word-break: break-all; line-height: 1.4;
+        }
+        .download-btn:hover { background: var(--text-color); color: var(--bg-color); box-shadow: 0 0 30px var(--text-color); }
+        .file-info { margin-top: 20px; color: var(--dim-color); font-size: 0.75rem; }
+
+        #terminal {
+            flex: 1; overflow-y: auto; padding-bottom: 20px;
+            font-size: 13px; line-height: 1.4; display: none;
+            transition: filter 1.5s ease, opacity 1.5s ease;
+        }
+        #terminal.blur-out { filter: blur(10px); opacity: 0.2; }
+
+        #terminal::-webkit-scrollbar { width: 8px; }
+        #terminal::-webkit-scrollbar-thumb { background: var(--dim-color); }
+
+        .line { margin-bottom: 3px; white-space: pre-wrap; word-break: break-all; }
+        .success { color: #fff; font-weight: bold; }
+        .warning { color: #ffff00; }
+        .dim { color: var(--dim-color); }
+        .cyan { color: #00ffff; }
+
+        .progress-container { display: flex; align-items: center; gap: 10px; margin: 2px 0 8px 0; }
+        .bar { color: var(--text-color); }
+
+        #virus-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000; animation: fadeIn 0.3s;
+            transition: opacity 0.8s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .alert-window {
+            background: #f0f0f0; border: 1px solid #999; border-radius: 8px;
+            width: 90%; max-width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif;
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-10px); } 40% { transform: translateX(10px); }
+            60% { transform: translateX(-6px); } 80% { transform: translateX(6px); }
+        }
+
+        .alert-header {
+            background: linear-gradient(to bottom, #c9302c, #a02622);
+            color: white; padding: 10px 15px; display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600;
+        }
+        .alert-header-icon {
+            width: 20px; height: 20px; background: white; color: #c9302c;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 14px;
+        }
+        .alert-body { padding: 25px 20px; display: flex; gap: 20px; align-items: flex-start; background: white; }
+        .alert-icon-large {
+            flex-shrink: 0; width: 56px; height: 56px; background: #c9302c;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            animation: pulseRed 1.5s infinite;
+        }
+        @keyframes pulseRed {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(201, 48, 44, 0.6); }
+            50% { box-shadow: 0 0 0 15px rgba(201, 48, 44, 0); }
+        }
+        .alert-icon-large svg { width: 32px; height: 32px; stroke: white; stroke-width: 3; fill: none; }
+        
+        .alert-text { color: #333; flex: 1; }
+        .alert-text h3 { margin: 0 0 10px 0; font-size: 16px; color: #c9302c; }
+        .alert-text p { margin: 0 0 8px 0; font-size: 13px; line-height: 1.5; color: #555; }
+        .alert-text .mono {
+            font-family: 'Fira Code', monospace; font-size: 11px; background: #f5f5f5;
+            padding: 6px 10px; border-radius: 4px; color: #c9302c;
+            margin-top: 10px; border-left: 3px solid #c9302c;
+        }
+        .alert-footer {
+            padding: 12px 20px; background: #f0f0f0; border-top: 1px solid #ddd;
+            display: flex; justify-content: flex-end; gap: 10px; position: relative; min-height: 60px;
+        }
+        .alert-btn {
+            padding: 8px 24px; font-size: 13px; border: 1px solid #adadad;
+            background: #e1e1e1; border-radius: 3px; cursor: pointer;
+            font-family: 'Segoe UI', sans-serif; transition: transform 0.15s; position: relative;
+        }
+        .alert-btn:hover { background: #cfcfcf; }
+        .alert-btn.primary { background: #c9302c; color: white; border-color: #a02622; }
+        .alert-btn.primary:hover { background: #a02622; }
+
+        /* ═════ ПОЗДРАВЛЕНИЕ С GLASSMORPHISM ═════ */
+        #congrats-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #ff6b9d 0%, #c06c84 50%, #f8b500 100%);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            display: none; justify-content: center; align-items: center;
+            z-index: 2000; opacity: 0; transition: opacity 1.5s ease;
+            overflow: hidden;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Плавающие эмодзи на фоне */
+        .floating-emoji {
+            position: absolute;
+            font-size: 2rem;
+            opacity: 0.3;
+            animation: float 6s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .floating-emoji:nth-child(1) { top: 10%; left: 10%; animation-delay: 0s; }
+        .floating-emoji:nth-child(2) { top: 20%; right: 15%; animation-delay: 1s; }
+        .floating-emoji:nth-child(3) { bottom: 15%; left: 20%; animation-delay: 2s; }
+        .floating-emoji:nth-child(4) { bottom: 25%; right: 10%; animation-delay: 3s; }
+        .floating-emoji:nth-child(5) { top: 50%; left: 5%; animation-delay: 4s; }
+        .floating-emoji:nth-child(6) { top: 60%; right: 20%; animation-delay: 5s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-30px) rotate(10deg); }
+        }
+
+        /* Конфетти */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: white;
+            animation: confettiFall 3s linear infinite;
+            opacity: 0.6;
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+
+        .congrats-card {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 30px;
+            padding: 50px 40px;
+            max-width: 90%;
+            width: 450px;
+            text-align: center;
+            box-shadow: 
+                0 20px 60px rgba(0,0,0,0.2),
+                0 0 0 1px rgba(255,255,255,0.3),
+                inset 0 0 30px rgba(255,255,255,0.2);
+            transform: scale(0.8) translateY(30px);
+            opacity: 0;
+            transition: all 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+            font-family: 'Nunito', sans-serif;
+            position: relative;
+            z-index: 10;
+        }
+
+        .congrats-card.show { 
+            transform: scale(1) translateY(0); 
+            opacity: 1;
+            animation: cardPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes cardPulse {
+            0%, 100% { box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.3), inset 0 0 30px rgba(255,255,255,0.2); }
+            50% { box-shadow: 0 25px 70px rgba(0,0,0,0.25), 0 0 0 2px rgba(255,255,255,0.4), inset 0 0 40px rgba(255,255,255,0.3); }
+        }
+
+        .congrats-emoji { 
+            font-size: 4rem; 
+            margin-bottom: 25px; 
+            animation: bounce 1s ease-in-out infinite;
+            text-shadow: 0 0 20px rgba(255,255,255,0.5);
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-15px) scale(1.1); }
+        }
+
+        .congrats-title {
+            font-size: 2.2rem; 
+            font-weight: 900; 
+            color: white;
+            margin-bottom: 20px; 
+            line-height: 1.3;
+            text-shadow: 0 0 20px rgba(255,255,255,0.5);
+            animation: titleGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes titleGlow {
+            from { text-shadow: 0 0 20px rgba(255,255,255,0.5); }
+            to { text-shadow: 0 0 30px rgba(255,255,255,0.8), 0 0 40px rgba(255,107,157,0.6); }
+        }
+
+        .congrats-text {
+            font-size: 1.3rem; 
+            color: rgba(255,255,255,0.95); 
+            line-height: 1.7;
+            margin-bottom: 30px; 
+            font-weight: 700;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .congrats-decor {
+            font-size: 2rem; 
+            letter-spacing: 8px; 
+            animation: shimmer 1.5s infinite alternate;
+            text-shadow: 0 0 15px rgba(255,255,255,0.6);
+        }
+
+        @keyframes shimmer { 
+            from { opacity: 0.7; transform: scale(1); } 
+            to { opacity: 1; transform: scale(1.05); } 
+        }
+
+        /* Мерцающие звезды */
+        .star {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s ease-in-out infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.5); }
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.3rem; }
+            .download-btn { font-size: 0.7rem; padding: 12px 15px; }
+            #terminal { font-size: 11px; }
+            .alert-body { flex-direction: column; align-items: center; text-align: center; }
+            .congrats-card { padding: 35px 25px; }
+            .congrats-title { font-size: 1.8rem; }
+            .congrats-text { font-size: 1.1rem; }
+            .congrats-emoji { font-size: 3rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen">
+        <h1>Xcortex MAX Installer</h1>
+        <p class="subtitle">Экспериментальный пакет системных утилит нового поколения. Требуется разрешение администратора.</p>
+        <button class="download-btn" id="downloadBtn">ЗАГРУЗКА...</button>
+        <p class="file-info" id="fileInfo"></p>
+    </div>
+
+    <div id="terminal"></div>
+
+    <div id="virus-overlay">
+        <div class="alert-window">
+            <div class="alert-header">
+                <div class="alert-header-icon">!</div>
+                <span>Критическая ошибка системы</span>
+            </div>
+            <div class="alert-body">
+                <div class="alert-icon-large">
+                    <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                </div>
+                <div class="alert-text">
+                    <h3>Установлен вредоносный вирус</h3>
+                    <p>На вашем устройстве обнаружен троян <b>Xcortex.exe</b>. Все личные данные были зашифрованы и отправлены на удалённый сервер.</p>
+                    <p><b>Отменить операцию нельзя.</b></p>
+                    <div class="mono">Error code: 0xDEADBEEF<br>Threat level: CRITICAL<br>Status: IRREVERSIBLE</div>
+                </div>
+            </div>
+            <div class="alert-footer">
+                <button class="alert-btn primary" id="okBtn">ОК</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="congrats-overlay">
+        <!-- Плавающие эмодзи -->
+        <div class="floating-emoji">🎉</div>
+        <div class="floating-emoji">🪷</div>
+        <div class="floating-emoji">🌸</div>
+        <div class="floating-emoji">😺</div>
+        <div class="floating-emoji">🎊</div>
+        <div class="floating-emoji">✨</div>
+
+        <!-- Карточка поздравления -->
+        <div class="congrats-card">
+            <div class="congrats-emoji">🪷😺</div>
+            <div class="congrats-title">С Днём Рождения!</div>
+            <div class="congrats-text">
+                Желаю счастья, здоровья,<br>
+                всего наилучшего и чтобы<br>
+                все мечты сбывались!!!
+            </div>
+            <div class="congrats-decor">🪷🌸🌸🪷</div>
+        </div>
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const startScreen = document.getElementById('start-screen');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        const virusOverlay = document.getElementById('virus-overlay');
+        const okBtn = document.getElementById('okBtn');
+        const congratsOverlay = document.getElementById('congrats-overlay');
+        const congratsCard = document.querySelector('.congrats-card');
+
+        function generateWeirdFilename() {
+            const prefixes = ["zip-webkit", "xcrtx", "neural", "quantum", "hyper", "syscore"];
+            const middles = ["cssdhejxk", "brtfnqwzx", "vklmnopq", "hgfedcba", "qwertyui", "zxcvbnm"];
+            const suffixes = ["v9.0.4", "beta_αω", "∆∆∆", "unstable", "rc3", "nightly"];
+            const extensions = [".apk", ".exe", ".bin", ".pkg", ".dmg", ".iso"];
+            
+            const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const m = middles[Math.floor(Math.random() * middles.length)];
+            const s = suffixes[Math.floor(Math.random() * suffixes.length)];
+            const e = extensions[Math.floor(Math.random() * extensions.length)];
+            const hash = Math.random().toString(36).substring(2, 8);
+            
+            return `DOWNLOAD ${p}${m}_${s}_${hash}${e}`;
+        }
+
+        downloadBtn.textContent = generateWeirdFilename();
+        fileInfo.textContent = `Размер: ${(Math.random() * 900 + 100).toFixed(1)} MB · SHA256: ${Math.random().toString(36).substring(2, 18)}...`;
+
+        // УМЕНЬШЕНО ДО 5 ПАКЕТОВ
+        const packages = [
+            "xcortex-core-utils",
+            "neural-net-driver-v2",
+            "quantum-encryption-lib",
+            "brute-force-bypass-tool",
+            "final-bootstrap-sequence"
+        ];
+
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+        function printLine(text, type = '') {
+            const div = document.createElement('div');
+            div.className = `line ${type}`;
+            div.textContent = text;
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        async function simulateProgressBar() {
+            const totalBlocks = 30; let current = 0;
+            const barDiv = document.createElement('div');
+            barDiv.className = 'progress-container';
+            barDiv.innerHTML = `<span class="dim">[</span><span class="bar"></span><span class="dim">]</span> <span class="percent">0%</span>`;
+            terminal.appendChild(barDiv);
+            
+            const barSpan = barDiv.querySelector('.bar');
+            const percentSpan = barDiv.querySelector('.percent');
+
+            while (current < totalBlocks) {
+                const jump = Math.floor(Math.random() * 3) + 1; 
+                current = Math.min(current + jump, totalBlocks);
+                barSpan.textContent = '█'.repeat(current) + '░'.repeat(totalBlocks - current);
+                percentSpan.textContent = Math.floor((current / totalBlocks) * 100) + '%';
+                terminal.scrollTop = terminal.scrollHeight;
+                await sleep(Math.random() * 50 + 20);
+            }
+            await sleep(100);
+        }
+
+        const scenarios = [
+            async (pkg, size) => {
+                printLine(`→ Fetching ${pkg} from mirror-7...`, "dim");
+                await sleep(200);
+                printLine(`→ Downloading: ${pkg} (${size} MB)`, "cyan");
+                await simulateProgressBar();
+                printLine(`→ Installing ${pkg}...`, "dim");
+                await sleep(300);
+                printLine(`✓ Successfully installed ${pkg}.`, "success");
+            },
+            async (pkg, size) => {
+                printLine(`→ Resolving ${pkg}...`, "dim");
+                await sleep(150);
+                printLine(`→ Downloading: ${pkg} (${size} MB)`, "cyan");
+                await simulateProgressBar();
+                printLine(`→ Verifying SHA256 checksum...`, "dim");
+                await sleep(400);
+                const hash = Math.random().toString(36).substring(2, 14);
+                printLine(`  Checksum OK: ${hash}...`, "success");
+                printLine(`→ Installing ${pkg}...`, "dim");
+                await sleep(250);
+                printLine(`✓ Successfully installed ${pkg}.`, "success");
+            },
+            async (pkg, size) => {
+                printLine(`→ Downloading source: ${pkg} (${size} MB)`, "cyan");
+                await simulateProgressBar();
+                printLine(`→ Extracting archive...`, "dim");
+                await sleep(300);
+                printLine(`→ Compiling from source (this may take a while)...`, "warning");
+                await sleep(200);
+                printLine(`  $ gcc -O2 -c main.c`, "dim");
+                await sleep(200);
+                printLine(`  $ gcc -O2 -c utils.c`, "dim");
+                await sleep(200);
+                printLine(`  $ linking objects...`, "dim");
+                await sleep(300);
+                printLine(`  Build successful.`, "success");
+                printLine(`→ Installing ${pkg}...`, "dim");
+                await sleep(200);
+                printLine(`✓ Successfully installed ${pkg}.`, "success");
+            },
+            async (pkg, size) => {
+                printLine(`→ Downloading: ${pkg} (${size} MB)`, "cyan");
+                await simulateProgressBar();
+                printLine(`→ Bypassing firewall restrictions...`, "warning");
+                await sleep(400);
+                printLine(`→ Injecting into kernel module...`, "warning");
+                await sleep(300);
+                printLine(`→ Patching system tables...`, "warning");
+                await sleep(300);
+                printLine(`→ Escalating privileges to root...`, "warning");
+                await sleep(200);
+                printLine(`✓ Successfully installed ${pkg} (hidden).`, "success");
+            },
+            async (pkg, size) => {
+                printLine(`→ Downloading encrypted payload: ${pkg} (${size} MB)`, "cyan");
+                await simulateProgressBar();
+                printLine(`→ Decrypting with AES-256-GCM...`, "dim");
+                await sleep(500);
+                printLine(`→ Key exchange complete.`, "success");
+                await sleep(200);
+                printLine(`→ Unpacking secure container...`, "dim");
+                await sleep(300);
+                printLine(`→ Installing ${pkg}...`, "dim");
+                await sleep(250);
+                printLine(`✓ Successfully installed ${pkg}.`, "success");
+            }
+        ];
+
+        async function installPackage(pkg, size) {
+            const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+            await scenario(pkg, size);
+            if (Math.random() > 0.85) {
+                await sleep(200);
+                printLine(`! WARNING: High memory usage detected. Continuing anyway...`, "warning");
+            }
+            await sleep(150);
+        }
+
+        async function startHack() {
+            startScreen.style.opacity = '0';
+            await sleep(500);
+            startScreen.style.display = 'none';
+            terminal.style.display = 'block';
+
+            printLine("Initializing Xcortex Download Manager v9.0.4...", "dim");
+            await sleep(600);
+            printLine("Connecting to secure server [192.168.X.X:443]...", "dim");
+            await sleep(900);
+            printLine("TLS handshake complete. Cipher: AES-256-GCM", "success");
+            await sleep(400);
+            printLine("Authenticating... OK", "success");
+            await sleep(300);
+            printLine("═══════════════════════════════════════════════════");
+            await sleep(400);
+            printLine(`Preparing to install ${packages.length} packages.`, "cyan");
+            await sleep(500);
+            
+            for (let i = 0; i < packages.length; i++) {
+                const pkg = packages[i];
+                const size = (Math.random() * 50 + 1).toFixed(1);
+                printLine("");
+                printLine(`╔══════════════════════════════════════════════════╗`, "dim");
+                printLine(`║ [${(i+1).toString().padStart(2,'0')}/${packages.length}] ${pkg.padEnd(41)}║`, "cyan");
+                printLine(`╚══════════════════════════════════════════════════╝`, "dim");
+                await installPackage(pkg, size);
+            }
+
+            printLine("");
+            printLine("═══════════════════════════════════════════════════");
+            await sleep(400);
+            printLine("Compiling binaries...", "dim");
+            await sleep(1200);
+            printLine("Linking system hooks...", "dim");
+            await sleep(800);
+            printLine("Registering services...", "dim");
+            await sleep(600);
+            printLine("Cleaning up temporary files...", "dim");
+            await sleep(700);
+            
+            printLine("");
+            printLine("███████╗ ██████╗ ██████╗ ██╗   ██╗ ██████╗", "success");
+            printLine("╚══███╔╝██╔═══██╗██╔══██╗██║   ██║██════╝", "success");
+            printLine("  ███╔╝ ██║   ██║██████╔╝██║   ██║██║     ", "success");
+            printLine(" ███╔╝  ██║   ██║██╔══██╗██║   ██║██║     ", "success");
+            printLine("███████╗╚██████╔╝██║  ██║╚██████╔╝██████╗", "success");
+            printLine("╚══════╝ ╚═════╝ ═╝  ╚═╝ ╚═════╝  ╚═════╝", "success");
+            printLine("");
+            printLine("INSTALLATION COMPLETE. SYSTEM READY.", "success");
+            printLine("All packages verified and activated.", "dim");
+            
+            // ИЗМЕНЕНО: 2.5 секунды вместо 5
+            setTimeout(showVirusAlert, 2500);
+        }
+
+        function showVirusAlert() {
+            virusOverlay.style.display = 'flex';
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.frequency.value = 400; gain.gain.value = 0.1;
+                osc.start();
+                setTimeout(() => { osc.frequency.value = 300; }, 150);
+                setTimeout(() => { osc.stop(); ctx.close(); }, 300);
+            } catch(e) {}
+        }
+
+        let escapeCount = 0;
+        const footer = document.querySelector('.alert-footer');
+
+        okBtn.addEventListener('mouseover', () => {
+            if (escapeCount < 2) {
+                const maxX = footer.clientWidth - okBtn.clientWidth - 20;
+                const x = Math.random() * maxX * (Math.random() < 0.5 ? -1 : 1);
+                const y = (Math.random() * 40 - 20);
+                okBtn.style.transform = `translate(${x}px, ${y}px)`;
+                escapeCount++;
+            }
+        });
+
+        // Создание конфетти и звезд
+        function createConfettiAndStars() {
+            const colors = ['#ff6b9d', '#ffd93d', '#6bcf7f', '#4d96ff', '#ff6b6b'];
+            
+            // Конфетти
+            for (let i = 0; i < 30; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                confetti.style.animationDelay = Math.random() * 2 + 's';
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+                congratsOverlay.appendChild(confetti);
+            }
+
+            // Звезды
+            for (let i = 0; i < 20; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 2 + 's';
+                congratsOverlay.appendChild(star);
+            }
+        }
+
+        okBtn.addEventListener('click', async () => {
+            virusOverlay.style.opacity = '0';
+            await sleep(800);
+            virusOverlay.style.display = 'none';
+
+            terminal.classList.add('blur-out');
+
+            congratsOverlay.style.display = 'flex';
+            createConfettiAndStars(); // Создаем конфетти и звезды
+            
+            await sleep(50);
+            congratsOverlay.style.opacity = '1';
+
+            await sleep(300);
+            congratsCard.classList.add('show');
+        });
+
+        downloadBtn.addEventListener('click', startHack);
+    </script>
+</body>
+</html>
